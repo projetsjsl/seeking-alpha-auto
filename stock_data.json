@@ -1,13 +1,13 @@
 {
-  "lastUpdate": "2025-10-02T06:13:43.575Z",
+  "lastUpdate": "2025-10-02T06:18:07.996Z",
   "stocks": {
     "CVS": {
       "ticker": "CVS",
-      "error": "API 400: {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.\"},\"request_id\":\"req_011CThswkReKRRTTVUCY4Gkh\"}"
+      "error": "Unexpected token # in JSON at position 0"
     },
     "MSFT": {
       "ticker": "MSFT",
-      "error": "API 400: {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.\"},\"request_id\":\"req_011CThswkpD1Si2Qj5oGfonJ\"}"
+      "error": "Unexpected token # in JSON at position 0"
     }
   }
 }
