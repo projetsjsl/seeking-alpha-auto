@@ -1,1 +1,5 @@
-{"tickers":["JNJ","AAPL"]}
+{
+  "tickers": [
+    "AAPL"
+  ]
+}
