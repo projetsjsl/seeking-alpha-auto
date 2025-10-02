@@ -1,0 +1,393 @@
+﻿<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seeking Alpha Dashboard</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const SeekingAlphaDashboard = () => {
+          const [githubToken, setGithubToken] = useState(localStorage.getItem('github_token') || '');
+          const [showSettings, setShowSettings] = useState(!localStorage.getItem('github_token'));
+          const [tickers, setTickers] = useState([]);
+          const [stockData, setStockData] = useState({});
+          const [newTicker, setNewTicker] = useState('');
+          const [loading, setLoading] = useState(false);
+          const [message, setMessage] = useState(null);
+
+          const GITHUB_REPO = 'projetsjsl/seeking-alpha-auto';
+          const GITHUB_BRANCH = 'main';
+
+          const showMessage = (text, type = 'info') => {
+            setMessage({ text, type });
+            setTimeout(() => setMessage(null), 5000);
+          };
+
+          const githubFetch = async (path, options = {}) => {
+            const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/${path}`;
+            const headers = {
+              'Authorization': `token ${githubToken}`,
+              'Accept': 'application/vnd.github.v3+json',
+              ...options.headers
+            };
+
+            const response = await fetch(url, { ...options, headers });
+            if (!response.ok) throw new Error(`GitHub API error: ${response.status}`);
+            return response.json();
+          };
+
+          const getFileContent = async (path) => {
+            try {
+              const data = await githubFetch(path);
+              return JSON.parse(atob(data.content));
+            } catch (error) {
+              console.error(`Error fetching ${path}:`, error);
+              return null;
+            }
+          };
+
+          const updateFile = async (path, content, message) => {
+            try {
+              let sha = null;
+              try {
+                const existing = await githubFetch(path);
+                sha = existing.sha;
+              } catch (e) {}
+
+              const body = {
+                message,
+                content: btoa(unescape(encodeURIComponent(JSON.stringify(content, null, 2)))),
+                branch: GITHUB_BRANCH
+              };
+
+              if (sha) body.sha = sha;
+
+              await githubFetch(path, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+              });
+
+              return true;
+            } catch (error) {
+              console.error(`Error updating ${path}:`, error);
+              throw error;
+            }
+          };
+
+          const loadData = async () => {
+            if (!githubToken) return;
+            
+            setLoading(true);
+            try {
+              const tickersData = await getFileContent('tickers.json');
+              if (tickersData) {
+                setTickers(tickersData.tickers || []);
+              } else {
+                await updateFile('tickers.json', { tickers: [] }, 'Initialize tickers.json');
+                setTickers([]);
+              }
+
+              const stocksData = await getFileContent('stock_data.json');
+              if (stocksData) {
+                setStockData(stocksData.stocks || {});
+              }
+
+              showMessage('Données chargées avec succès', 'success');
+            } catch (error) {
+              showMessage('Erreur lors du chargement des données', 'error');
+              console.error(error);
+            } finally {
+              setLoading(false);
+            }
+          };
+
+          const addTicker = async () => {
+            if (!newTicker.trim()) return;
+            
+            const ticker = newTicker.trim().toUpperCase();
+            if (tickers.includes(ticker)) {
+              showMessage('Ce ticker existe déjà', 'warning');
+              return;
+            }
+
+            setLoading(true);
+            try {
+              const newTickers = [...tickers, ticker];
+              await updateFile('tickers.json', { tickers: newTickers }, `Add ticker ${ticker}`);
+              setTickers(newTickers);
+              setNewTicker('');
+              showMessage(`Ticker ${ticker} ajouté avec succès`, 'success');
+            } catch (error) {
+              showMessage('Erreur lors de l\'ajout du ticker', 'error');
+              console.error(error);
+            } finally {
+              setLoading(false);
+            }
+          };
+
+          const removeTicker = async (ticker) => {
+            if (!confirm(`Supprimer ${ticker} ?`)) return;
+
+            setLoading(true);
+            try {
+              const newTickers = tickers.filter(t => t !== ticker);
+              await updateFile('tickers.json', { tickers: newTickers }, `Remove ticker ${ticker}`);
+              setTickers(newTickers);
+              
+              const newStockData = { ...stockData };
+              delete newStockData[ticker];
+              setStockData(newStockData);
+              
+              showMessage(`Ticker ${ticker} supprimé`, 'success');
+            } catch (error) {
+              showMessage('Erreur lors de la suppression', 'error');
+              console.error(error);
+            } finally {
+              setLoading(false);
+            }
+          };
+
+          const openScraperInstructions = () => {
+            window.open('https://github.com/projetsjsl/seeking-alpha-auto/blob/main/scraper-snippet.js', '_blank');
+            showMessage('Instructions ouvertes. Suivez le fichier scraper-snippet.js sur GitHub', 'info');
+          };
+
+          const saveSettings = () => {
+            localStorage.setItem('github_token', githubToken);
+            setShowSettings(false);
+            loadData();
+            showMessage('Configuration sauvegardée', 'success');
+          };
+
+          useEffect(() => {
+            if (githubToken && !showSettings) {
+              loadData();
+            }
+          }, [githubToken, showSettings]);
+
+          const getGradeColor = (grade) => {
+            if (!grade) return 'bg-gray-100 text-gray-600';
+            const letter = grade.charAt(0);
+            if (letter === 'A') return 'bg-green-100 text-green-700';
+            if (letter === 'B') return 'bg-blue-100 text-blue-700';
+            if (letter === 'C') return 'bg-yellow-100 text-yellow-700';
+            if (letter === 'D') return 'bg-orange-100 text-orange-700';
+            if (letter === 'F') return 'bg-red-100 text-red-700';
+            return 'bg-gray-100 text-gray-600';
+          };
+
+          if (showSettings) {
+            return (
+              <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 p-8">
+                <div className="max-w-2xl mx-auto bg-white rounded-lg shadow-xl p-8">
+                  <h1 className="text-3xl font-bold text-gray-800 mb-6">Configuration</h1>
+
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        GitHub Personal Access Token
+                      </label>
+                      <input
+                        type="password"
+                        value={githubToken}
+                        onChange={(e) => setGithubToken(e.target.value)}
+                        placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                      <p className="mt-2 text-sm text-gray-500">
+                        Créez un token sur{' '}
+                        <a 
+                          href="https://github.com/settings/tokens" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:underline"
+                        >
+                          github.com/settings/tokens
+                        </a>
+                        {' '}avec les permissions "repo"
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={saveSettings}
+                      disabled={!githubToken}
+                      className="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Sauvegarder et Continuer
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 p-4">
+              {message && (
+                <div className={`fixed top-4 right-4 px-6 py-4 rounded-lg shadow-lg z-50 ${
+                  message.type === 'success' ? 'bg-green-500' :
+                  message.type === 'error' ? 'bg-red-500' :
+                  message.type === 'warning' ? 'bg-yellow-500' :
+                  'bg-blue-500'
+                } text-white font-medium`}>
+                  {message.text}
+                </div>
+              )}
+
+              <div className="max-w-7xl mx-auto mb-8">
+                <div className="flex items-center justify-between mb-6">
+                  <h1 className="text-4xl font-bold text-white">Seeking Alpha Dashboard</h1>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setShowSettings(true)}
+                      className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600"
+                    >
+                      Paramètres
+                    </button>
+                    <button
+                      onClick={loadData}
+                      disabled={loading}
+                      className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 disabled:opacity-50"
+                    >
+                      Actualiser
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-slate-800 rounded-lg p-6 mb-6">
+                  <h2 className="text-xl font-bold text-white mb-4">Gestion des Tickers</h2>
+                  
+                  <div className="flex gap-3 mb-6">
+                    <input
+                      type="text"
+                      value={newTicker}
+                      onChange={(e) => setNewTicker(e.target.value.toUpperCase())}
+                      onKeyPress={(e) => e.key === 'Enter' && addTicker()}
+                      placeholder="Ex: MSFT, GOOGL, TSLA..."
+                      className="flex-1 px-4 py-2 rounded-lg bg-slate-700 text-white border border-slate-600 focus:border-blue-500 focus:outline-none"
+                    />
+                    <button
+                      onClick={addTicker}
+                      disabled={loading || !newTicker.trim()}
+                      className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      Ajouter
+                    </button>
+                    <button
+                      onClick={openScraperInstructions}
+                      className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                    >
+                      Instructions Scraper
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {tickers.length === 0 ? (
+                      <p className="text-slate-400">Aucun ticker ajouté</p>
+                    ) : (
+                      tickers.map(ticker => (
+                        <div key={ticker} className="flex items-center gap-2 bg-slate-700 px-4 py-2 rounded-lg">
+                          <span className="text-white font-medium">{ticker}</span>
+                          <button onClick={() => removeTicker(ticker)} className="text-red-400 hover:text-red-300">×</button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {tickers.map(ticker => {
+                  const data = stockData[ticker];
+                  
+                  if (!data) {
+                    return (
+                      <div key={ticker} className="bg-slate-800 rounded-lg p-6">
+                        <h3 className="text-2xl font-bold text-white mb-4">{ticker}</h3>
+                        <p className="text-slate-400">Pas de données. Utilisez le scraper.</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={ticker} className="bg-slate-800 rounded-lg p-6">
+                      <div className="flex items-start justify-between mb-4">
+                        <div>
+                          <h3 className="text-2xl font-bold text-white">{ticker}</h3>
+                          <p className="text-sm text-slate-400">{data.companyName || 'N/A'}</p>
+                        </div>
+                        {data.price && (
+                          <div className="text-right">
+                            <div className="text-xl font-bold text-white">{data.price}</div>
+                            <div className={`text-sm ${data.priceChange?.includes('+') ? 'text-green-400' : 'text-red-400'}`}>
+                              {data.priceChange}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-2 mb-4">
+                        {data.marketCap && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-slate-400">Market Cap</span>
+                            <span className="text-white font-medium">{data.marketCap}</span>
+                          </div>
+                        )}
+                        {data.peRatio && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-slate-400">P/E Ratio</span>
+                            <span className="text-white font-medium">{data.peRatio}</span>
+                          </div>
+                        )}
+                        {data.dividend?.yield && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-slate-400">Dividend Yield</span>
+                            <span className="text-white font-medium">{data.dividend.yield}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {data.quantRating && (
+                        <div className="space-y-2">
+                          <h4 className="text-sm font-medium text-slate-300 mb-2">Quant Ratings</h4>
+                          <div className="grid grid-cols-2 gap-2">
+                            {Object.entries(data.quantRating).map(([key, value]) => {
+                              if (!value || key === 'overall') return null;
+                              return (
+                                <div key={key} className="flex items-center justify-between">
+                                  <span className="text-xs text-slate-400 capitalize">{key}</span>
+                                  <span className={`px-2 py-1 rounded text-xs font-bold ${getGradeColor(value)}`}>
+                                    {value}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="mt-4 text-xs text-slate-500">
+                        Mis à jour: {data.scrapedAt ? new Date(data.scrapedAt).toLocaleString('fr-FR') : 'N/A'}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        };
+
+        ReactDOM.render(<SeekingAlphaDashboard />, document.getElementById('root'));
+    </script>
+</body>
+</html>
