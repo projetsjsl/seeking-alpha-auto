@@ -3,17 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Seeking Alpha Dashboard</title>
+    <title>Tableau de Bord Seeking Alpha GOB - propulsé par JSL AI</title>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
     <div id="root"></div>
     
     <script type="text/babel">
         const { useState, useEffect } = React;
+        const { RefreshCw, Plus, Trash2, Settings, X, Download, TrendingUp, TrendingDown, BarChart3, SortAsc } = lucide;
 
         const SeekingAlphaDashboard = () => {
           const [githubToken, setGithubToken] = useState(localStorage.getItem('github_token') || '');
@@ -24,6 +26,8 @@
           const [loading, setLoading] = useState(false);
           const [message, setMessage] = useState(null);
           const [selectedStock, setSelectedStock] = useState(null);
+          const [sortBy, setSortBy] = useState('ticker');
+          const [showChart, setShowChart] = useState(false);
 
           const GITHUB_REPO = 'projetsjsl/seeking-alpha-auto';
           const GITHUB_BRANCH = 'main';
@@ -93,7 +97,7 @@
               if (stocksData) {
                 setStockData(stocksData.stocks || {});
               }
-              showMessage('Données chargées avec succès', 'success');
+              showMessage('Données chargées', 'success');
             } catch (error) {
               showMessage('Erreur chargement', 'error');
             } finally {
@@ -111,7 +115,7 @@
             setLoading(true);
             try {
               const newTickers = [...tickers, ticker];
-              await updateFile('tickers.json', { tickers: newTickers }, `Add ticker ${ticker}`);
+              await updateFile('tickers.json', { tickers: newTickers }, `Add ${ticker}`);
               setTickers(newTickers);
               setNewTicker('');
               showMessage(`${ticker} ajouté`, 'success');
@@ -129,12 +133,9 @@
               const newTickers = tickers.filter(t => t !== ticker);
               await updateFile('tickers.json', { tickers: newTickers }, `Remove ${ticker}`);
               setTickers(newTickers);
-              const newStockData = { ...stockData };
-              delete newStockData[ticker];
-              setStockData(newStockData);
               showMessage(`${ticker} supprimé`, 'success');
             } catch (error) {
-              showMessage('Erreur suppression', 'error');
+              showMessage('Erreur', 'error');
             } finally {
               setLoading(false);
             }
@@ -153,14 +154,37 @@
             }
           }, [githubToken, showSettings]);
 
+          const getSortedTickers = () => {
+            return [...tickers].sort((a, b) => {
+              const dataA = stockData[a];
+              const dataB = stockData[b];
+              
+              if (!dataA || !dataB) return 0;
+              
+              switch(sortBy) {
+                case 'ticker':
+                  return a.localeCompare(b);
+                case 'rating':
+                  const ratingOrder = { 'Buy': 3, 'Hold': 2, 'Sell': 1 };
+                  const rA = ratingOrder[dataA.finalConclusion?.rating] || 0;
+                  const rB = ratingOrder[dataB.finalConclusion?.rating] || 0;
+                  return rB - rA;
+                case 'valuation':
+                  return (dataB.quantRating?.valuation || 'Z').localeCompare(dataA.quantRating?.valuation || 'Z');
+                default:
+                  return 0;
+              }
+            });
+          };
+
           const getGradeColor = (grade) => {
             if (!grade) return 'bg-gray-100 text-gray-600';
             const letter = grade.charAt(0);
-            if (letter === 'A') return 'bg-green-100 text-green-700';
-            if (letter === 'B') return 'bg-blue-100 text-blue-700';
-            if (letter === 'C') return 'bg-yellow-100 text-yellow-700';
-            if (letter === 'D') return 'bg-orange-100 text-orange-700';
-            if (letter === 'F') return 'bg-red-100 text-red-700';
+            if (letter === 'A') return 'bg-green-100 text-green-700 border border-green-300';
+            if (letter === 'B') return 'bg-blue-100 text-blue-700 border border-blue-300';
+            if (letter === 'C') return 'bg-yellow-100 text-yellow-700 border border-yellow-300';
+            if (letter === 'D') return 'bg-orange-100 text-orange-700 border border-orange-300';
+            if (letter === 'F') return 'bg-red-100 text-red-700 border border-red-300';
             return 'bg-gray-100 text-gray-600';
           };
 
@@ -174,266 +198,420 @@
           };
 
           if (showSettings) {
-            return React.createElement('div', { className: 'min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 p-8' },
-              React.createElement('div', { className: 'max-w-2xl mx-auto bg-white rounded-lg shadow-xl p-8' },
-                React.createElement('h1', { className: 'text-3xl font-bold text-gray-800 mb-6' }, 'Configuration'),
-                React.createElement('div', { className: 'space-y-6' },
-                  React.createElement('div', null,
-                    React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-2' }, 'GitHub Token'),
-                    React.createElement('input', {
-                      type: 'password',
-                      value: githubToken,
-                      onChange: (e) => setGithubToken(e.target.value),
-                      placeholder: 'ghp_xxxxxxxxxxxxxxxxxxxx',
-                      className: 'w-full px-4 py-3 border border-gray-300 rounded-lg'
-                    })
-                  ),
-                  React.createElement('button', {
-                    onClick: saveSettings,
-                    disabled: !githubToken,
-                    className: 'w-full bg-blue-600 text-white py-3 rounded-lg'
-                  }, 'Sauvegarder')
-                )
-              )
+            return (
+              <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 p-8">
+                <div className="max-w-2xl mx-auto bg-white rounded-lg shadow-xl p-8">
+                  <h1 className="text-3xl font-bold text-gray-800 mb-6">Configuration</h1>
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">GitHub Token</label>
+                      <input
+                        type="password"
+                        value={githubToken}
+                        onChange={(e) => setGithubToken(e.target.value)}
+                        placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg"
+                      />
+                    </div>
+                    <button onClick={saveSettings} disabled={!githubToken} className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700">
+                      Sauvegarder
+                    </button>
+                  </div>
+                </div>
+              </div>
             );
           }
 
-          return React.createElement('div', { className: 'min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 p-4' },
-            message && React.createElement('div', {
-              className: `fixed top-4 right-4 px-6 py-4 rounded-lg shadow-lg z-50 ${
-                message.type === 'success' ? 'bg-green-500' :
-                message.type === 'error' ? 'bg-red-500' :
-                message.type === 'warning' ? 'bg-yellow-500' : 'bg-blue-500'
-              } text-white font-medium`
-            }, message.text),
+          return (
+            <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 p-4">
+              {message && (
+                <div className={`fixed top-4 right-4 px-6 py-4 rounded-lg shadow-lg z-50 ${
+                  message.type === 'success' ? 'bg-green-500' :
+                  message.type === 'error' ? 'bg-red-500' :
+                  message.type === 'warning' ? 'bg-yellow-500' : 'bg-blue-500'
+                } text-white font-medium`}>{message.text}</div>
+              )}
 
-            React.createElement('div', { className: 'max-w-7xl mx-auto mb-8' },
-              React.createElement('div', { className: 'flex items-center justify-between mb-6' },
-                React.createElement('h1', { className: 'text-4xl font-bold text-white' }, 'Seeking Alpha Dashboard'),
-                React.createElement('div', { className: 'flex gap-3' },
-                  React.createElement('button', {
-                    onClick: () => setShowSettings(true),
-                    className: 'px-4 py-2 bg-slate-700 text-white rounded-lg'
-                  }, 'Paramètres'),
-                  React.createElement('button', {
-                    onClick: loadData,
-                    disabled: loading,
-                    className: 'px-4 py-2 bg-slate-700 text-white rounded-lg'
-                  }, 'Actualiser')
-                )
-              ),
+              <div className="max-w-7xl mx-auto mb-8">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 bg-white rounded-lg flex items-center justify-center font-bold text-2xl text-blue-600 shadow-lg">
+                      JSL
+                    </div>
+                    <div>
+                      <h1 className="text-4xl font-bold text-white">Tableau de bord Seeking Alpha GOB</h1>
+                      <p className="text-sm text-slate-300">Propulsé par JSL AI</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <button onClick={() => setShowChart(!showChart)} className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600">
+                      <BarChart3 size={20} />
+                    </button>
+                    <button onClick={() => setShowSettings(true)} className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600">
+                      <Settings size={20} />
+                    </button>
+                    <button onClick={loadData} disabled={loading} className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600">
+                      <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
+                    </button>
+                  </div>
+                </div>
 
-              React.createElement('div', { className: 'bg-slate-800 rounded-lg p-6 mb-6' },
-                React.createElement('h2', { className: 'text-xl font-bold text-white mb-4' }, 'Gestion des Tickers'),
-                React.createElement('div', { className: 'flex gap-3 mb-6' },
-                  React.createElement('input', {
-                    type: 'text',
-                    value: newTicker,
-                    onChange: (e) => setNewTicker(e.target.value.toUpperCase()),
-                    onKeyPress: (e) => e.key === 'Enter' && addTicker(),
-                    placeholder: 'Ex: MSFT, GOOGL...',
-                    className: 'flex-1 px-4 py-2 rounded-lg bg-slate-700 text-white'
-                  }),
-                  React.createElement('button', {
-                    onClick: addTicker,
-                    disabled: loading,
-                    className: 'px-6 py-2 bg-blue-600 text-white rounded-lg'
-                  }, 'Ajouter')
-                ),
-                React.createElement('div', { className: 'flex flex-wrap gap-2' },
-                  tickers.map(ticker =>
-                    React.createElement('div', {
-                      key: ticker,
-                      className: 'flex items-center gap-2 bg-slate-700 px-4 py-2 rounded-lg'
-                    },
-                      React.createElement('span', { className: 'text-white font-medium' }, ticker),
-                      React.createElement('button', {
-                        onClick: () => removeTicker(ticker),
-                        className: 'text-red-400'
-                      }, '×')
-                    )
-                  )
-                )
-              )
-            ),
+                {showChart && (
+                  <div className="bg-slate-800 rounded-lg p-6 mb-6">
+                    <h2 className="text-xl font-bold text-white mb-4">Comparaison des Ratings</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {getSortedTickers().filter(t => stockData[t] && !stockData[t].error).map(ticker => {
+                        const data = stockData[ticker];
+                        return (
+                          <div key={ticker} className="bg-slate-700 rounded-lg p-4">
+                            <div className="text-white font-bold mb-2">{ticker}</div>
+                            <div className="space-y-1">
+                              {Object.entries(data.quantRating || {}).map(([key, value]) => (
+                                <div key={key} className="flex justify-between items-center text-sm">
+                                  <span className="text-slate-300 capitalize">{key}</span>
+                                  <span className={`${getGradeColor(value)} px-2 py-0.5 rounded text-xs font-bold`}>{value}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
-            React.createElement('div', { className: 'max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' },
-              tickers.map(ticker => {
-                const data = stockData[ticker];
-                if (!data || data.error) {
-                  return React.createElement('div', {
-                    key: ticker,
-                    className: 'bg-slate-800 rounded-lg p-6'
-                  },
-                    React.createElement('h3', { className: 'text-2xl font-bold text-white mb-4' }, ticker),
-                    React.createElement('p', { className: 'text-slate-400' }, data?.error || 'Pas de données')
+                <div className="bg-slate-800 rounded-lg p-6 mb-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-xl font-bold text-white">Gestion des Tickers</h2>
+                    <div className="flex items-center gap-2">
+                      <SortAsc size={20} className="text-white" />
+                      <select 
+                        value={sortBy} 
+                        onChange={(e) => setSortBy(e.target.value)}
+                        className="bg-slate-700 text-white px-3 py-2 rounded-lg"
+                      >
+                        <option value="ticker">Ticker (A-Z)</option>
+                        <option value="rating">Recommandation</option>
+                        <option value="valuation">Valuation</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex gap-3 mb-6">
+                    <input
+                      type="text"
+                      value={newTicker}
+                      onChange={(e) => setNewTicker(e.target.value.toUpperCase())}
+                      onKeyPress={(e) => e.key === 'Enter' && addTicker()}
+                      placeholder="Ex: MSFT, GOOGL..."
+                      className="flex-1 px-4 py-2 rounded-lg bg-slate-700 text-white border border-slate-600"
+                    />
+                    <button onClick={addTicker} disabled={loading} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                      <Plus size={20} />
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {tickers.map(ticker => (
+                      <div key={ticker} className="flex items-center gap-2 bg-slate-700 px-4 py-2 rounded-lg">
+                        <span className="text-white font-medium">{ticker}</span>
+                        <button onClick={() => removeTicker(ticker)} className="text-red-400 hover:text-red-300">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {getSortedTickers().map(ticker => {
+                  const data = stockData[ticker];
+                  if (!data || data.error) {
+                    return (
+                      <div key={ticker} className="bg-slate-800 rounded-lg p-6 border-2 border-slate-700">
+                        <h3 className="text-2xl font-bold text-white mb-4">{ticker}</h3>
+                        <p className="text-slate-400">{data?.error || 'Pas de données'}</p>
+                      </div>
+                    );
+                  }
+
+                  const rating = data.finalConclusion?.rating || 'Hold';
+                  
+                  return (
+                    <div key={ticker} onClick={() => setSelectedStock(ticker)} 
+                         className="bg-slate-800 rounded-lg p-6 hover:bg-slate-750 cursor-pointer transition-all hover:scale-105 shadow-xl border-2 border-slate-700 hover:border-blue-500">
+                      <div className="flex items-start justify-between mb-4">
+                        <div>
+                          <h3 className="text-2xl font-bold text-white">{ticker}</h3>
+                          <p className="text-sm text-slate-400">{data.companyName || 'N/A'}</p>
+                        </div>
+                        <div className={`${getRatingColor(rating)} text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg`}>
+                          {rating}
+                        </div>
+                      </div>
+
+                      {data.metrics?.price && (
+                        <div className="mb-4 p-3 bg-slate-900 rounded-lg">
+                          <div className="text-2xl font-bold text-white">{data.metrics.price}</div>
+                          <div className={`text-sm flex items-center gap-1 ${data.metrics.priceChange?.includes('+') ? 'text-green-400' : 'text-red-400'}`}>
+                            {data.metrics.priceChange?.includes('+') ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
+                            {data.metrics.priceChange}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="space-y-2 mb-4 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Market Cap</span>
+                          <span className="text-white font-medium">{data.metrics?.marketCap || 'N/A'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">P/E Ratio</span>
+                          <span className="text-white font-medium">{data.metrics?.peRatio || 'N/A'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Dividend</span>
+                          <span className="text-white font-medium">{data.metrics?.dividendYield || 'N/A'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Secteur</span>
+                          <span className="text-white font-medium text-xs">{data.metrics?.sector || 'N/A'}</span>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-700 pt-4 mb-4">
+                        <div className="text-xs text-slate-400 mb-2 font-semibold">QUANT RATINGS</div>
+                        <div className="grid grid-cols-5 gap-1">
+                          {Object.entries(data.quantRating || {}).map(([key, value]) => (
+                            <div key={key} className="text-center">
+                              <div className="text-xs text-slate-500 mb-1">{key.substring(0, 3)}</div>
+                              <div className={`${getGradeColor(value)} px-1 py-1 rounded text-xs font-bold`}>{value || '-'}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="text-xs text-slate-500 text-center pt-3 border-t border-slate-700">
+                        Cliquez pour le rapport détaillé
+                      </div>
+                    </div>
                   );
-                }
+                })}
+              </div>
 
-                const rating = data.finalConclusion?.rating || 'Hold';
-                
-                return React.createElement('div', {
-                  key: ticker,
-                  onClick: () => setSelectedStock(ticker),
-                  className: 'bg-slate-800 rounded-lg p-6 hover:bg-slate-750 cursor-pointer transition-all hover:scale-105 shadow-lg'
-                },
-                  React.createElement('div', { className: 'flex items-start justify-between mb-4' },
-                    React.createElement('div', null,
-                      React.createElement('h3', { className: 'text-2xl font-bold text-white' }, ticker),
-                      React.createElement('p', { className: 'text-sm text-slate-400' }, data.companyName || 'N/A')
-                    ),
-                    React.createElement('div', {
-                      className: `${getRatingColor(rating)} text-white text-xs font-bold px-3 py-1 rounded-full`
-                    }, rating)
-                  ),
+              {selectedStock && stockData[selectedStock] && (
+                <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4 overflow-y-auto" 
+                     onClick={() => setSelectedStock(null)}>
+                  <div className="bg-white rounded-xl max-w-5xl w-full my-8" onClick={(e) => e.stopPropagation()}>
+                    <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6 rounded-t-xl flex justify-between items-center shadow-lg">
+                      <div>
+                        <h2 className="text-3xl font-bold">{selectedStock}</h2>
+                        <p className="text-blue-100">{stockData[selectedStock].companyName}</p>
+                      </div>
+                      <button onClick={() => setSelectedStock(null)} className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition">
+                        <X size={24} />
+                      </button>
+                    </div>
+                    
+                    <div className="p-8 space-y-8 max-h-[70vh] overflow-y-auto">
+                      <section className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-xl">
+                        <h3 className="text-2xl font-bold text-blue-900 mb-4 flex items-center gap-2">
+                          <div className="w-1 h-8 bg-blue-600 rounded"></div>
+                          Métriques Clés
+                        </h3>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                          <div className="bg-white p-4 rounded-lg shadow">
+                            <div className="text-sm text-gray-500">Capitalisation</div>
+                            <div className="text-xl font-bold text-gray-900">{stockData[selectedStock].metrics?.marketCap || 'N/A'}</div>
+                          </div>
+                          <div className="bg-white p-4 rounded-lg shadow">
+                            <div className="text-sm text-gray-500">Croissance BPA</div>
+                            <div className="text-xl font-bold text-gray-900">{stockData[selectedStock].metrics?.bpaGrowth || 'N/A'}</div>
+                          </div>
+                          <div className="bg-white p-4 rounded-lg shadow">
+                            <div className="text-sm text-gray-500">P/E Ratio</div>
+                            <div className="text-xl font-bold text-gray-900">{stockData[selectedStock].metrics?.peRatio || 'N/A'}</div>
+                          </div>
+                          <div className="bg-white p-4 rounded-lg shadow">
+                            <div className="text-sm text-gray-500">Secteur</div>
+                            <div className="text-lg font-bold text-gray-900">{stockData[selectedStock].metrics?.sector || 'N/A'}</div>
+                          </div>
+                          <div className="bg-white p-4 rounded-lg shadow">
+                            <div className="text-sm text-gray-500">Rendement Dividende</div>
+                            <div className="text-xl font-bold text-green-600">{stockData[selectedStock].metrics?.dividendYield || 'N/A'}</div>
+                          </div>
+                          <div className="bg-white p-4 rounded-lg shadow">
+                            <div className="text-sm text-gray-500">Fréquence</div>
+                            <div className="text-lg font-bold text-gray-900">{stockData[selectedStock].metrics?.dividendFrequency || 'N/A'}</div>
+                          </div>
+                          <div className="bg-white p-4 rounded-lg shadow">
+                            <div className="text-sm text-gray-500">Ex-Dividende</div>
+                            <div className="text-sm font-medium text-gray-900">{stockData[selectedStock].metrics?.exDivDate || 'N/A'}</div>
+                          </div>
+                          <div className="bg-white p-4 rounded-lg shadow">
+                            <div className="text-sm text-gray-500">Paiement Annuel</div>
+                            <div className="text-xl font-bold text-green-600">{stockData[selectedStock].metrics?.annualPayout || 'N/A'}</div>
+                          </div>
+                          <div className="bg-white p-4 rounded-lg shadow">
+                            <div className="text-sm text-gray-500">Prix Actuel</div>
+                            <div className="text-xl font-bold text-blue-600">{stockData[selectedStock].metrics?.price || 'N/A'}</div>
+                          </div>
+                        </div>
+                      </section>
 
-                  data.metrics?.price && React.createElement('div', { className: 'mb-4' },
-                    React.createElement('div', { className: 'text-2xl font-bold text-white' }, data.metrics.price),
-                    React.createElement('div', {
-                      className: `text-sm ${data.metrics.priceChange?.includes('+') ? 'text-green-400' : 'text-red-400'}`
-                    }, data.metrics.priceChange)
-                  ),
+                      <section className="bg-white p-6 rounded-xl shadow-lg">
+                        <h3 className="text-2xl font-bold text-blue-900 mb-4 flex items-center gap-2">
+                          <div className="w-1 h-8 bg-blue-600 rounded"></div>
+                          Profil de l'Entreprise
+                        </h3>
+                        <p className="text-gray-700 leading-relaxed mb-4">{stockData[selectedStock].companyProfile?.description || 'N/A'}</p>
+                        {stockData[selectedStock].companyProfile?.employees && (
+                          <div className="bg-blue-50 p-4 rounded-lg">
+                            <strong className="text-blue-900">Employés:</strong> {stockData[selectedStock].companyProfile.employees}
+                          </div>
+                        )}
+                        {stockData[selectedStock].companyProfile?.innovation && (
+                          <div className="bg-blue-50 p-4 rounded-lg mt-2">
+                            <strong className="text-blue-900">Innovation:</strong> {stockData[selectedStock].companyProfile.innovation}
+                          </div>
+                        )}
+                      </section>
 
-                  React.createElement('div', { className: 'space-y-2 mb-4' },
-                    React.createElement('div', { className: 'flex justify-between text-sm' },
-                      React.createElement('span', { className: 'text-slate-400' }, 'Market Cap'),
-                      React.createElement('span', { className: 'text-white' }, data.metrics?.marketCap || 'N/A')
-                    ),
-                    React.createElement('div', { className: 'flex justify-between text-sm' },
-                      React.createElement('span', { className: 'text-slate-400' }, 'P/E'),
-                      React.createElement('span', { className: 'text-white' }, data.metrics?.peRatio || 'N/A')
-                    )
-                  ),
+                      <section className="bg-white p-6 rounded-xl shadow-lg">
+                        <h3 className="text-2xl font-bold text-blue-900 mb-4 flex items-center gap-2">
+                          <div className="w-1 h-8 bg-blue-600 rounded"></div>
+                          Concurrence et Positionnement
+                        </h3>
+                        {stockData[selectedStock].competition?.competitors?.length > 0 && (
+                          <div className="mb-4">
+                            <p className="font-semibold mb-2 text-gray-700">Concurrents Principaux:</p>
+                            <div className="flex flex-wrap gap-2">
+                              {stockData[selectedStock].competition.competitors.map((c, i) => (
+                                <span key={i} className="bg-blue-100 text-blue-800 px-4 py-2 rounded-full text-sm font-medium">{c}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {stockData[selectedStock].competition?.valueProposition && (
+                          <div className="bg-blue-50 p-4 rounded-lg mb-3">
+                            <strong className="text-blue-900">Proposition de Valeur:</strong>
+                            <p className="text-gray-700 mt-2">{stockData[selectedStock].competition.valueProposition}</p>
+                          </div>
+                        )}
+                        {stockData[selectedStock].competition?.advantages && (
+                          <div className="bg-green-50 p-4 rounded-lg">
+                            <strong className="text-green-900">Avantages Compétitifs:</strong>
+                            <p className="text-gray-700 mt-2">{stockData[selectedStock].competition.advantages}</p>
+                          </div>
+                        )}
+                      </section>
 
-                  data.quantRating && React.createElement('div', { className: 'grid grid-cols-3 gap-2' },
-                    Object.entries(data.quantRating).slice(1, 4).map(([key, value]) =>
-                      React.createElement('div', { key: key, className: 'text-center' },
-                        React.createElement('div', { className: 'text-xs text-slate-400 mb-1' }, key.substring(0, 4)),
-                        React.createElement('div', {
-                          className: `${getGradeColor(value)} px-2 py-1 rounded text-xs font-bold`
-                        }, value)
-                      )
-                    )
-                  ),
+                      <section className="bg-gradient-to-br from-purple-50 to-blue-50 p-6 rounded-xl shadow-lg">
+                        <h3 className="text-2xl font-bold text-blue-900 mb-6 flex items-center gap-2">
+                          <div className="w-1 h-8 bg-blue-600 rounded"></div>
+                          Analyse Quantitative (Seeking Alpha)
+                        </h3>
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                          {Object.entries(stockData[selectedStock].quantRating || {}).map(([key, value]) => (
+                            <div key={key} className="bg-white p-4 rounded-lg shadow-md text-center">
+                              <div className="text-sm text-gray-600 mb-2 capitalize font-medium">{key}</div>
+                              <div className={`${getGradeColor(value)} px-4 py-3 rounded-lg font-bold text-2xl`}>{value || 'N/A'}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
 
-                  React.createElement('div', {
-                    className: 'mt-4 pt-4 border-t border-slate-700 text-xs text-slate-500 text-center'
-                  }, 'Cliquez pour le rapport complet')
-                );
-              })
-            ),
+                      {stockData[selectedStock].sectorAnalysis && (
+                        <section className="bg-white p-6 rounded-xl shadow-lg">
+                          <h3 className="text-2xl font-bold text-blue-900 mb-4 flex items-center gap-2">
+                            <div className="w-1 h-8 bg-blue-600 rounded"></div>
+                            Analyse Comparative Sectorielle
+                          </h3>
+                          <div className="space-y-4">
+                            {Object.entries(stockData[selectedStock].sectorAnalysis).map(([key, value]) => (
+                              <div key={key} className="bg-gray-50 p-4 rounded-lg border-l-4 border-blue-500">
+                                <span className="font-bold capitalize text-blue-900">{key}:</span>
+                                <p className="text-gray-700 mt-1">{value}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </section>
+                      )}
 
-            selectedStock && stockData[selectedStock] && React.createElement('div', {
-              className: 'fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4',
-              onClick: () => setSelectedStock(null)
-            },
-              React.createElement('div', {
-                className: 'bg-white rounded-lg max-w-4xl max-h-[90vh] overflow-y-auto w-full',
-                onClick: (e) => e.stopPropagation()
-              },
-                React.createElement('div', {
-                  className: 'sticky top-0 bg-white border-b p-6 flex justify-between items-center'
-                },
-                  React.createElement('h2', { className: 'text-3xl font-bold' },
-                    `${selectedStock} - ${stockData[selectedStock].companyName}`
-                  ),
-                  React.createElement('button', {
-                    onClick: () => setSelectedStock(null),
-                    className: 'p-2 hover:bg-gray-100 rounded'
-                  }, '×')
-                ),
-                
-                React.createElement('div', { className: 'p-6 space-y-6' },
-                  React.createElement('section', null,
-                    React.createElement('h3', {
-                      className: 'text-2xl font-bold text-blue-900 mb-4 border-b-2 border-blue-900 pb-2'
-                    }, 'Métriques Clés'),
-                    React.createElement('div', { className: 'grid grid-cols-2 gap-4' },
-                      React.createElement('div', null, React.createElement('strong', null, 'Capitalisation: '),
-                        stockData[selectedStock].metrics?.marketCap
-                      ),
-                      React.createElement('div', null, React.createElement('strong', null, 'Croissance BPA: '),
-                        stockData[selectedStock].metrics?.bpaGrowth
-                      ),
-                      React.createElement('div', null, React.createElement('strong', null, 'P/E: '),
-                        stockData[selectedStock].metrics?.peRatio
-                      ),
-                      React.createElement('div', null, React.createElement('strong', null, 'Secteur: '),
-                        stockData[selectedStock].metrics?.sector
-                      ),
-                      React.createElement('div', null, React.createElement('strong', null, 'Dividende: '),
-                        stockData[selectedStock].metrics?.dividendYield
-                      )
-                    )
-                  ),
+                      {stockData[selectedStock].intermediateConclusion && (
+                        <section className="bg-yellow-50 p-6 rounded-xl shadow-lg border-2 border-yellow-200">
+                          <h3 className="text-2xl font-bold text-yellow-900 mb-4 flex items-center gap-2">
+                            <div className="w-1 h-8 bg-yellow-600 rounded"></div>
+                            Conclusion Intermédiaire
+                          </h3>
+                          <p className="text-gray-700 leading-relaxed text-lg">{stockData[selectedStock].intermediateConclusion}</p>
+                        </section>
+                      )}
 
-                  React.createElement('section', null,
-                    React.createElement('h3', {
-                      className: 'text-2xl font-bold text-blue-900 mb-4 border-b-2 border-blue-900 pb-2'
-                    }, 'Profil Entreprise'),
-                    React.createElement('p', { className: 'text-gray-700' },
-                      stockData[selectedStock].companyProfile?.description
-                    )
-                  ),
+                      <section className="bg-green-50 p-6 rounded-xl shadow-lg border-2 border-green-200">
+                        <h3 className="text-2xl font-bold text-green-900 mb-4 flex items-center gap-2">
+                          <div className="w-1 h-8 bg-green-600 rounded"></div>
+                          Points Positifs des Analystes
+                        </h3>
+                        <ul className="space-y-3">
+                          {(stockData[selectedStock].strengths || []).map((s, i) => (
+                            <li key={i} className="flex items-start gap-3 bg-white p-4 rounded-lg shadow">
+                              <span className="flex-shrink-0 w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-sm font-bold">{i + 1}</span>
+                              <span className="text-gray-700">{s}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
 
-                  React.createElement('section', null,
-                    React.createElement('h3', {
-                      className: 'text-2xl font-bold text-blue-900 mb-4 border-b-2 border-blue-900 pb-2'
-                    }, 'Quant Ratings'),
-                    React.createElement('div', { className: 'grid grid-cols-5 gap-4' },
-                      Object.entries(stockData[selectedStock].quantRating || {}).map(([key, value]) =>
-                        React.createElement('div', { key: key, className: 'text-center' },
-                          React.createElement('div', {
-                            className: 'text-sm text-gray-600 mb-2 capitalize'
-                          }, key),
-                          React.createElement('div', {
-                            className: `${getGradeColor(value)} px-4 py-2 rounded-lg font-bold`
-                          }, value)
-                        )
-                      )
-                    )
-                  ),
+                      <section className="bg-red-50 p-6 rounded-xl shadow-lg border-2 border-red-200">
+                        <h3 className="text-2xl font-bold text-red-900 mb-4 flex items-center gap-2">
+                          <div className="w-1 h-8 bg-red-600 rounded"></div>
+                          Points de Préoccupation
+                        </h3>
+                        <ul className="space-y-3">
+                          {(stockData[selectedStock].concerns || []).map((c, i) => (
+                            <li key={i} className="flex items-start gap-3 bg-white p-4 rounded-lg shadow">
+                              <span className="flex-shrink-0 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-sm font-bold">!</span>
+                              <span className="text-gray-700">{c}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
 
-                  React.createElement('section', null,
-                    React.createElement('h3', {
-                      className: 'text-2xl font-bold text-blue-900 mb-4 border-b-2 border-blue-900 pb-2'
-                    }, 'Points Positifs'),
-                    React.createElement('ul', { className: 'list-disc list-inside space-y-2' },
-                      (stockData[selectedStock].strengths || []).map((s, i) =>
-                        React.createElement('li', { key: i }, s)
-                      )
-                    )
-                  ),
+                      <section className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-8 rounded-xl shadow-2xl">
+                        <h3 className="text-3xl font-bold mb-6">Conclusion Finale - Seeking Alpha</h3>
+                        <div className="space-y-4">
+                          {stockData[selectedStock].finalConclusion?.strengths && (
+                            <div className="bg-white bg-opacity-10 p-4 rounded-lg">
+                              <p className="font-bold text-xl mb-2">Forces:</p>
+                              <p className="text-blue-100">{stockData[selectedStock].finalConclusion.strengths}</p>
+                            </div>
+                          )}
+                          {stockData[selectedStock].finalConclusion?.weaknesses && (
+                            <div className="bg-white bg-opacity-10 p-4 rounded-lg">
+                              <p className="font-bold text-xl mb-2">Faiblesses:</p>
+                              <p className="text-blue-100">{stockData[selectedStock].finalConclusion.weaknesses}</p>
+                            </div>
+                          )}
+                          <div className="bg-white p-6 rounded-lg text-gray-900 shadow-xl">
+                            <div className="flex items-center justify-between mb-4">
+                              <p className="font-bold text-2xl">Recommandation:</p>
+                              <span className={`${getRatingColor(stockData[selectedStock].finalConclusion?.rating)} text-white px-6 py-3 rounded-full font-bold text-xl shadow-lg`}>
+                                {stockData[selectedStock].finalConclusion?.rating || 'N/A'}
+                              </span>
+                            </div>
+                            <p className="text-gray-700 text-lg leading-relaxed">{stockData[selectedStock].finalConclusion?.recommendation || 'N/A'}</p>
+                          </div>
+                        </div>
+                      </section>
 
-                  React.createElement('section', null,
-                    React.createElement('h3', {
-                      className: 'text-2xl font-bold text-blue-900 mb-4 border-b-2 border-blue-900 pb-2'
-                    }, 'Préoccupations'),
-                    React.createElement('ul', { className: 'list-disc list-inside space-y-2' },
-                      (stockData[selectedStock].concerns || []).map((c, i) =>
-                        React.createElement('li', { key: i }, c)
-                      )
-                    )
-                  ),
-
-                  React.createElement('section', null,
-                    React.createElement('h3', {
-                      className: 'text-2xl font-bold text-blue-900 mb-4 border-b-2 border-blue-900 pb-2'
-                    }, 'Conclusion'),
-                    React.createElement('div', {
-                      className: 'bg-blue-50 border-l-4 border-blue-500 p-4'
-                    },
-                      React.createElement('p', { className: 'font-bold text-lg mb-2' },
-                        'Recommandation: ', stockData[selectedStock].finalConclusion?.rating
-                      ),
-                      React.createElement('p', null,
-                        stockData[selectedStock].finalConclusion?.recommendation
-                      )
-                    )
-                  )
-                )
-              )
-            )
+                      <div className="text-center text-gray-500 text-sm pt-4 border-t">
+                        Mis à jour: {stockData[selectedStock].lastUpdate ? new Date(stockData[selectedStock].lastUpdate).toLocaleString('fr-FR') : 'N/A'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           );
         };
 
