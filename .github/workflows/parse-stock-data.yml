@@ -116,6 +116,9 @@ jobs:
             const data = await response.json();
             let text = data.content[0].text;
             
+            // Forcer le décodage UTF-8
+            text = decodeURIComponent(escape(text));
+            
             // Nettoyage agressif
             text = text.replace(/```json\n?/g, "");
             text = text.replace(/```\n?/g, "");
@@ -162,7 +165,7 @@ jobs:
             fs.writeFileSync('stock_data.json', JSON.stringify({
               lastUpdate: new Date().toISOString(),
               stocks: parsedStocks
-            }, null, 2));
+            }, null, 2), 'utf8');
             console.log("Terminé!");
           }
 
