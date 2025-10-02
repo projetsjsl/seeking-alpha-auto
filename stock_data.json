@@ -1,0 +1,10 @@
+{
+  "lastUpdate": "2025-10-02T05:55:20.072Z",
+  "stocks": {
+    "CVS": {
+      "ticker": "CVS",
+      "error": "Failed to fetch",
+      "scrapedAt": "2025-10-02T05:42:44.517Z"
+    }
+  }
+}
